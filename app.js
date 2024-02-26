@@ -7,7 +7,7 @@ const ALLOWED_EXTENSIONS = new Set(['.js', '.py', '.java', '.c', '.cpp', '.cs', 
 
 
 const configuration = new Configuration({
-    apiKey: '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'
+    apiKey: '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'
 })
 
 const openai = new OpenAIApi(configuration);
@@ -18,58 +18,65 @@ const openai = new OpenAIApi(configuration);
 // { role: "system", content: "You are a chatbot that determines the framework (frontend and backend), programming languages, and associated technologies used by a codebase. You are provide the codebase one directory at a time. A codebase can be comprised of many directories. Provide enough information so that each determination per directory can be combined into a final determination. You will be given this information in the final determination to decide what the correct determination is. Explain your thought process, step by step, on how you came to the determinations. In the final step, return one or many JSON objects that contain the final determination." }
 
 async function generateFromOpenAI(content) {
+
+    let tools = [
+        {
+            type: "function",
+            function: {
+                name: "analyze_codebase_from_code",
+                description: "Analyze a codebase from a set of code and determine the frontend and backend technologies and frameworks being used. You will also provide an explanation of how you came to this determination, along with suggested Microsoft Azure services to deploy this code towards.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        determinationSteps: {
+                            type: "string",
+                            description: "A set of steps that explains how the determination was made.",
+                        },
+                        determinationScore: {
+                            type: "number",
+                            description: "A value from 0 to 100 that represents the confidence of the determination.",
+                        },
+                        frameworks: {
+                            type: "string",
+                            description: "The names of the web frameworks being used in the codebase.",
+                        },
+                        language: {
+                            type: "string",
+                            description: "The names of the programming languages being used in the codebase",
+                        },
+                        explanationForAzureServiceSelection: {
+                            type: "string",
+                            description: "A set of steps that explains how you made the selection for the Azure services",
+                        },
+                        primaryAzureComputeService: {
+                            type: "string",
+                            description: "The name of the primary service (one) that should be deployed to fo this codebase. Select only one service.",
+                        },
+                        primaryAzureDatabaseService: {
+                            type: "string",
+                            description: "The name of the primary database service (one) that should be deployed to fo this codebase. Select only one service.",
+                        }
+                    },
+                    required: ["determinationSteps", "determinationScore", "frameworks", "language", "explanationForAzureServiceSelection", "primaryAzureComputeService", "primaryAzureDatabaseService"]
+                },
+            }
+        }
+    ];
+
     try {
         const completion = await openai.createChatCompletion({
-            model: "gpt-4-0613",
+            model: "gpt-4-turbo-preview",
             temperature: 0.1,
             messages: [
-                { role: "system", content: "You are a chatbot that determines the framework (frontend and backend), programming languages, and associated technologies used by a codebase. You are provide the codebase one directory at a time. A codebase can be comprised of many directories. Provide enough information so that each determination per directory can be combined into a final determination. You will be given this information in the final determination to decide what the correct determination is. Explain your thought process, step by step, on how you came to the determinations." },
-                { role: "user", content: content }
+                { role: "system", content: "You are a chatbot that determines the framework (frontend and backend), programming languages, and associated technologies used by a codebase. You are provided the codebase one directory at a time. A codebase can be comprised of many directories. Provide enough information so that each determination per directory can be combined into a final determination. You will be given this information in the final determination to decide what the correct determination is. Explain your thought process, step by step, on how you came to the determinations. You will call the analyze_codebase_from_code function." },
+                { role: "user", content: content }  
             ],
-            functions: [
-                {
-                    name: "analyze_codebase_from_code",
-                    description: "Analyze a codebase from a set of code and determine the technologies and frameworks being used. You will also provide an explanation of how you came to this determination, along with suggested Microsoft Azure services to deploy this code towards. You also generate an ARM template that deploys that resource.",
-                    parameters: {
-                        type: "object",
-                        properties: {
-                            determinationSteps: {
-                                type: "string",
-                                description: "A set of steps that explains how the determination was made.",
-                            },
-                            determinationScore: {
-                                type: "number",
-                                description: "A value from 0 to 100 that represents the confidence of the determination.",
-                            },
-                            frameworks: {
-                                type: "string",
-                                description: "The names of the web frameworks being used in the codebase.",
-                            },
-                            language: {
-                                type: "string",
-                                description: "The names of the programming languages being used in the codebase",
-                            },
-                            explanationForAzureServiceSelection: {
-                                type: "string",
-                                description: "A set of steps that explains how you made the selection for the Azure services",
-                            },
-                            primaryAzureComputeService: {
-                                type: "string",
-                                description: "The name of the primary service (one) that should be deployed to fo this codebase. Select only one service.",
-                            },
-                            primaryAzureDatabaseService: {
-                                type: "string",
-                                description: "The name of the primary database service (one) that should be deployed to fo this codebase. Select only one service.",
-                            }
-                        },
-                        required: ["determinationSteps", "determinationScore", "frameworks", "language", "explanationForAzureServiceSelection", "primaryAzureComputeService", "primaryAzureDatabaseService", "generatedARMTemplate"]
-                    },
-                }
-            ],
-            function_call: "auto",
+            tools: tools,
+            tool_choice: "auto",
         });
-
-        console.log(completion.data.choices[0].message);
+        // console.log(completion.data.choices[0].message.tool_calls[0].function);
+        let parsedObject = JSON.parse(completion.data.choices[0].message.tool_calls[0].function.arguments);
+        console.log(parsedObject);
     } catch (error) {
         console.error("An error occurred:", error.response.data);
     }
@@ -233,6 +240,6 @@ async function readDirectoriesAndGenerate(directoryPath) {
 
 
 // Start generating
-// (readDirectoriesAndGenerate('./azure-search-openai-demo-csharp')); // replace './mydirectory' with your actual directory
+(readDirectoriesAndGenerate('fiber-go-template')); // replace './mydirectory' with your actual directory
 // generateFromOpenAI('Hello world');
-generateARMFromOpenAI("Azure Static Web Apps, Azure SQL Database");
+// generateARMFromOpenAI("Azure Static Web Apps, Azure SQL Database");
